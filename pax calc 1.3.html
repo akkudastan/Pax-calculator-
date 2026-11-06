@@ -1,0 +1,733 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>PAX</title>
+<style>
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html { height:100%; }
+  body { margin:0; min-height:100%; font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; background:#f2f4f7; color:#1b2430; padding:8px; display:flex; justify-content:center; touch-action:manipulation; }
+  .app { width:100%; max-width:460px; display:flex; flex-direction:column; gap:8px; }
+  .card { background:#fff; border:1px solid #dde2e8; border-radius:10px; padding:8px; }
+  .row { display:flex; gap:6px; align-items:flex-end; }
+  .f { flex:1; min-width:0; }
+  .f label { display:block; font-size:10px; color:#6b7785; margin-bottom:2px; text-transform:uppercase; }
+  input { width:100%; font:inherit; font-size:15px; padding:6px; border:1px solid #dde2e8; border-radius:7px; text-align:center; background:#fff; color:inherit; }
+
+  /* окошки со строками */
+  .win { font-family:ui-monospace,Menlo,Consolas,monospace; font-size:14px; line-height:1.5; overflow:auto;
+         -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; }
+  #out { min-height:110px; max-height:calc(100vh - 540px); }
+  #sbyBox, #othBox { min-height:30px; max-height:96px; }
+  .ln { display:flex; justify-content:space-between; align-items:center; padding:1px 0; }
+  .ln.e { padding:3px 0; }
+  .pre { white-space:pre; }
+  .ln.tot { font-weight:700; }
+  .t { padding:4px 2px; border-radius:5px; cursor:pointer; }
+  .t:active { background:#dbe7ff; }
+  .q { padding:4px 2px; }
+  .t.act.neg, .t.wt.neg { color:#c62828; font-weight:600; }
+  .t.act.pos, .t.wt.pos { color:#2e7d32; font-weight:600; }
+  .t.cls.Y { color:#2e9e4f; font-weight:700; }
+  .t.cls.J { color:#f08a00; font-weight:700; }
+  .t.z { color:#2e9e4f; font-weight:700; }
+  .of { color:#8a95a3; font-size:12px; font-family:system-ui,sans-serif; }
+  .ctl { display:flex; align-items:center; gap:5px; flex-shrink:0; }
+  .sq { width:28px; height:28px; display:flex; align-items:center; justify-content:center; border:1px solid #cfd6de; background:#eef1f5; border-radius:6px; font-size:18px; font-weight:700; line-height:1; cursor:pointer; color:#1b2430; }
+  .sq:active { background:#1f6feb; color:#fff; border-color:#1f6feb; }
+  .sq.go { background:#e7f6ec; border-color:#9ad3ac; color:#237a3c; }
+  .sq.back { background:#fff3e0; border-color:#f3c88a; color:#c46f00; }
+  .sq.off { opacity:.3; }
+  .sq.dn { background:#e7f6ec; border-color:#9ad3ac; color:#237a3c; font-size:15px; }
+  .sq.upg { background:#fff3e0; border-color:#f3c88a; color:#c46f00; font-size:15px; }
+  .x { color:#c62828; padding:4px 6px; font-size:15px; cursor:pointer; }
+  .hint { color:#8a95a3; font-size:12px; font-family:system-ui,sans-serif; padding:6px 0; }
+
+  .sbyhead { display:flex; justify-content:space-between; align-items:center; margin-bottom:2px; gap:6px; }
+  .hdr-r { display:flex; align-items:center; gap:6px; }
+  .hdr-r input { width:74px; padding:4px; font-size:13px; }
+  .clsname { font-size:10px; color:#6b7785; text-transform:uppercase; }
+  .mini { border:1px solid #1f6feb; background:#1f6feb; color:#fff; font:inherit; font-size:12px; font-weight:600; padding:4px 10px; border-radius:7px; }
+
+  .acts { display:flex; gap:6px; }
+  .acts button { flex:1; border:1px solid #dde2e8; background:#fff; font:inherit; font-size:13px; padding:10px 0; border-radius:8px; color:#1b2430; }
+  .acts button.p { background:#1b2430; color:#fff; border-color:#1b2430; }
+
+  .logbox { font-size:13px; line-height:1.5; min-height:40px; max-height:120px; overflow:auto; color:#3a4654; }
+  .logbox .empty { color:#8a95a3; }
+  .logbox .ad { color:#237a3c; } .logbox .rm { color:#c62828; } .logbox .ot { color:#6b7785; margin-top:2px; }
+
+  .dock { display:flex; gap:8px; padding-bottom:4px; }
+  .dockbtn { flex:1; display:flex; align-items:center; justify-content:center; gap:8px; background:#fff; border:1px solid #dde2e8; border-radius:12px; padding:10px 0; color:#1b2430; font:inherit; font-size:13px; font-weight:600; }
+  .dockbtn:active { background:#dbe7ff; }
+  .dockbtn svg { width:24px; height:24px; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+
+  .pop { position:fixed; z-index:50; display:none; gap:6px; padding:8px; background:#fff; border:1px solid #cfd6de; border-radius:12px; box-shadow:0 8px 24px rgba(0,0,0,.18); }
+  .pop button { border:0; background:#eef1f5; font:inherit; font-weight:700; font-size:15px; padding:10px 12px; border-radius:8px; min-width:44px; color:#1b2430; }
+  .pop button:active { background:#1f6feb; color:#fff; }
+  .pop.v { flex-direction:column; gap:4px; }
+  .pop.v button { width:100%; min-width:84px; text-align:left; padding:11px 16px; }
+  .pop input { width:90px; }
+
+  /* панели: заметки и альбом */
+  .sheet { position:fixed; inset:0; z-index:100; background:#f2f4f7; display:none; flex-direction:column; gap:8px; padding:10px 10px calc(10px + env(safe-area-inset-bottom)); }
+  .sheet.open { display:flex; }
+  .sh-head { display:flex; align-items:center; gap:6px; }
+  .sh-title { font-weight:700; font-size:15px; }
+  .sh-b { border:1px solid #dde2e8; background:#fff; font:inherit; font-size:13px; padding:8px 12px; border-radius:8px; color:#1b2430; }
+  .sh-b.sm { padding:7px 10px; }
+  .sh-b:active { background:#dbe7ff; }
+  .sh-x { margin-left:auto; border:0; background:#1b2430; color:#fff; font-size:16px; width:36px; height:36px; border-radius:10px; }
+  #noteTa { flex:1; width:100%; resize:none; text-align:left; font:inherit; font-size:16px; line-height:1.5; padding:12px; border:1px solid #dde2e8; border-radius:10px; background:#fff; }
+  .sh-foot { display:flex; gap:8px; }
+  .sh-foot .sh-b { flex:1; padding:11px 0; }
+  .tools { display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+  .clr { width:32px; height:32px; border-radius:50%; border:2px solid #fff; box-shadow:0 0 0 1px #cfd6de; }
+  .clr.on { box-shadow:0 0 0 3px #1f6feb; }
+  .clr.er { background:#fff; font-size:15px; color:#1b2430; }
+  .wd { width:34px; height:34px; border:1px solid #dde2e8; background:#fff; border-radius:8px; display:flex; align-items:center; justify-content:center; }
+  .wd.on { border-color:#1f6feb; background:#dbe7ff; }
+  .wd i { display:block; background:#1b2430; border-radius:50%; }
+  .sep { width:1px; height:24px; background:#dde2e8; margin:0 2px; }
+  .canvaswrap { flex:1; min-height:0; background:#fff; border:1px solid #dde2e8; border-radius:10px; overflow:hidden; }
+  #cv { width:100%; height:100%; display:block; touch-action:none; }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- окошко: пассажиры с другого рейса -->
+  <div class="card">
+    <div class="sbyhead">
+      <span class="clsname">С другого рейса</span>
+      <span class="hdr-r">
+        <input id="othFlt" placeholder="рейс" inputmode="numeric" maxlength="6">
+        <button class="mini" id="othAdd">+ Строка</button>
+      </span>
+    </div>
+    <div class="win" id="othBox"></div>
+  </div>
+
+  <!-- окошко SBY: кто ждёт окончания посадки -->
+  <div class="card">
+    <div class="sbyhead">
+      <span class="clsname">SBY · ждут окончания посадки</span>
+      <button class="mini" id="sbyAdd">+ Строка</button>
+    </div>
+    <div class="win" id="sbyBox"></div>
+  </div>
+
+  <div class="card">
+    <div class="row">
+      <div class="f"><label>Flight</label><input id="flt" value="" placeholder="№ рейса" inputmode="numeric"></div>
+      <div class="f"><label>Total pax</label><input id="total" type="number" inputmode="numeric" value="" placeholder="кол-во"></div>
+    </div>
+    <div class="row" style="margin-top:6px">
+      <div class="f"><label>M kg</label><input id="w_M" type="number" inputmode="numeric" value="88"></div>
+      <div class="f"><label>F kg</label><input id="w_F" type="number" inputmode="numeric" value="70"></div>
+      <div class="f"><label>Chd kg</label><input id="w_Chd" type="number" inputmode="numeric" value="35"></div>
+      <div class="f"><label>Inf kg</label><input id="w_INF" type="number" inputmode="numeric" value="15"></div>
+      <div class="f"><label>Bag kg</label><input id="w_B" type="number" inputmode="numeric" value="20"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="sbyhead">
+      <span class="clsname">Рейс · изменения</span>
+      <button class="mini" id="add">+ Строка</button>
+    </div>
+    <div class="win" id="out"></div>
+  </div>
+
+  <div class="acts">
+    <button id="undo">↶ Отмена</button>
+    <button id="clr">Очистить</button>
+    <button id="copy" class="p">Копировать</button>
+  </div>
+
+  <div class="card">
+    <div class="clsname">Итог</div>
+    <div class="logbox" id="log"></div>
+  </div>
+
+  <div class="dock">
+    <button class="dockbtn" id="btnNotes" aria-label="Заметки">
+      <svg viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5"/><path d="M9 13h7M9 17h5"/></svg>Заметки
+    </button>
+    <button class="dockbtn" id="btnAlbum" aria-label="Альбом для рисования">
+      <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="M4 18l5-5 4 4 3-3 4 4"/></svg>Рисунок
+    </button>
+  </div>
+</div>
+
+<div class="pop" id="pop"></div>
+
+<!-- Заметки -->
+<div class="sheet" id="sheetNotes">
+  <div class="sh-head"><span class="sh-title">Заметки</span><button class="sh-x" data-close="sheetNotes" aria-label="Закрыть">✕</button></div>
+  <textarea id="noteTa" placeholder="Пишите заметки здесь…"></textarea>
+  <div class="sh-foot"><button class="sh-b" id="noteCopy">Копировать</button><button class="sh-b" id="noteClr">Очистить</button></div>
+</div>
+
+<!-- Альбом для рисования -->
+<div class="sheet" id="sheetAlbum">
+  <div class="sh-head">
+    <button class="sh-b sm" id="pgPrev" aria-label="Предыдущая страница">◀</button>
+    <span class="sh-title" id="pgTitle">Стр. 1 / 1</span>
+    <button class="sh-b sm" id="pgNext" aria-label="Следующая страница">▶</button>
+    <button class="sh-b sm" id="pgNew">+ Стр.</button>
+    <button class="sh-x" data-close="sheetAlbum" aria-label="Закрыть">✕</button>
+  </div>
+  <div class="tools">
+    <button class="clr on" data-c="#1b2430" style="background:#1b2430" aria-label="Чёрный"></button>
+    <button class="clr" data-c="#e03131" style="background:#e03131" aria-label="Красный"></button>
+    <button class="clr" data-c="#1f6feb" style="background:#1f6feb" aria-label="Синий"></button>
+    <button class="clr" data-c="#2e9e4f" style="background:#2e9e4f" aria-label="Зелёный"></button>
+    <button class="clr er" id="eraser" aria-label="Ластик">⌫</button>
+    <span class="sep"></span>
+    <button class="wd" data-w="2" aria-label="Тонко"><i style="width:4px;height:4px"></i></button>
+    <button class="wd on" data-w="4" aria-label="Средне"><i style="width:8px;height:8px"></i></button>
+    <button class="wd" data-w="9" aria-label="Толсто"><i style="width:14px;height:14px"></i></button>
+  </div>
+  <div class="tools">
+    <button class="sh-b sm" id="cvUndo">↶ Отмена</button>
+    <button class="sh-b sm" id="cvClr">Очистить</button>
+    <button class="sh-b sm" id="pgDel">Удалить стр.</button>
+  </div>
+  <div class="canvaswrap"><canvas id="cv"></canvas></div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const TYPES = ['M','F','Chd','INF','B'];
+const POOLS = ['sby','oth'];       // sby — ждут окончания посадки, oth — пассажиры с другого рейса
+let entries = [];                  // основное окно: {act:'-'|'+', type, cls:'Y'|'J', qty, sby, oth, upg, dng}
+let P = {sby:[], oth:[]};          // окна SBY и «с другого рейса»: {type, cls, qty (ждут сейчас), moved (уже забрали)}
+let snaps = [];                    // история для «Отмена»
+let dest = 'DEST';
+const D = () => dest || 'DEST';
+
+const NOUN = {
+  M:   ['мужчину','мужчины','мужчин'],
+  F:   ['женщину','женщины','женщин'],
+  Chd: ['ребёнка','ребёнка','детей'],
+  INF: ['инфанта','инфанта','инфантов'],
+  B:   ['багаж','багажа','багажей']
+};
+function plural(n, f){
+  const a = n%100, b = n%10;
+  if(a>=11 && a<=14) return f[2];
+  if(b===1) return f[0];
+  if(b>=2 && b<=4) return f[1];
+  return f[2];
+}
+const esc = s => String(s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const wOf = t => Number($('w_'+t).value) || 0;
+function snap(){ snaps.push(JSON.stringify({e:entries, p:P})); if(snaps.length>100) snaps.shift(); }
+const nextType = (t, list) => list[(list.indexOf(t)+1) % list.length];
+function buzz(){ if(navigator.vibrate) try{ navigator.vibrate(15); }catch(_){} }
+
+/* ---------- сохранение ---------- */
+const normRows = a => (a||[]).map(r=>({type:r.type, cls:r.cls, qty:Math.max(0,Number(r.qty)||0), moved:Math.max(0,Number(r.moved)||0)}));
+function save(){
+  try{ localStorage.setItem('pax4', JSON.stringify({entries, sbyRows:P.sby, othRows:P.oth, dest, flt:$('flt').value, othFlt:$('othFlt').value, total:$('total').value, w:TYPES.map(t=>$('w_'+t).value)})); }catch(e){}
+}
+function load(){
+  try{
+    const d = JSON.parse(localStorage.getItem('pax4'));
+    if(!d) return;
+    entries = d.entries||[];
+    P.sby = normRows(d.sbyRows); P.oth = normRows(d.othRows);
+    dest = (d.dest===undefined ? 'DEST' : d.dest).toUpperCase();
+    $('flt').value = d.flt||''; $('othFlt').value = d.othFlt||''; $('total').value = d.total||'';
+    if(d.w) TYPES.forEach((t,i)=>{ if(d.w[i]!==undefined) $('w_'+t).value = d.w[i]; });
+  }catch(e){}
+}
+
+/* ---------- расчёт ---------- */
+function calc(){
+  const hasTotal = String($('total').value).trim() !== '';
+  const total = Number($('total').value)||0;
+  let pax = total, net = 0;
+  entries.forEach(e=>{
+    const w = wOf(e.type)*e.qty;
+    net += e.act==='-' ? -w : w;
+    if(e.type!=='B') pax += e.act==='-' ? -e.qty : e.qty;
+  });
+  return {total: hasTotal ? total : '—', pax: hasTotal ? pax : '—', net};
+}
+const fltText = () => ($('flt').value||'').trim() || '—';
+function rowText(e){
+  const sp = e.type==='B' ? '' : ' ';
+  return `${D()} ${e.act}${e.qty}${sp}${e.type} ${e.cls} ${e.act}${wOf(e.type)*e.qty}kg`;
+}
+function plain(){
+  const {total, pax, net} = calc();
+  const L = [`DESTINATION: ${D()}. Flight ${fltText()}`, `Total ${total} pax`];
+  entries.forEach(e=>L.push(rowText(e)));
+  if(entries.length && net!==0) L.push(`${net<0?'–':'+'} ${Math.abs(net)} kg`);
+  L.push(`Total pax ${pax}`);
+  return L.join('\n');
+}
+
+/* ---------- метки строки «+»: из SBY (sby), с другого рейса (oth), upgrade (upg), downgrade (dng) ---------- */
+function bump(act, type, cls, n){
+  let x = entries.find(e=>e.act===act && e.type===type && e.cls===cls);
+  if(x) x.qty += n; else { x = {act, type, cls, qty:n}; entries.push(x); }
+  return x;
+}
+function clearTags(e){ e.sby = 0; e.oth = 0; e.upg = 0; e.dng = 0; }
+/* пассажиры, забранные из окна k, исчезли из центра -> возвращаем в то же окно (та же строка type+class);
+   нет такой строки — создаём новую, чтобы никто не потерялся */
+function returnToPool(k, type, cls, n){
+  const rows = P[k];
+  for(const r of rows){
+    if(n<=0) break;
+    if(r.type===type && r.cls===cls && (r.moved||0)>0){
+      const m = Math.min(n, r.moved); r.qty += m; r.moved -= m; n -= m;
+    }
+  }
+  if(n>0){
+    const r = rows.find(x=>x.type===type && x.cls===cls);
+    if(r) r.qty += n; else rows.push({type, cls, qty:n, moved:0});
+  }
+}
+/* пассажир остаётся на рейсе, но больше не «из окна k»: только гасим «из N» */
+function forgetPool(k, type, cls, n){
+  for(const r of P[k]){
+    if(n<=0) break;
+    if(r.type===type && r.cls===cls && (r.moved||0)>0){ const m = Math.min(n, r.moved); r.moved -= m; n -= m; }
+  }
+}
+function dropPools(e, mode){        // 'return' — вернуть в окна, 'forget' — остаются на рейсе
+  POOLS.forEach(k=>{
+    const n = Math.min(e[k]||0, e.qty);
+    if(n>0){ if(mode==='return') returnToPool(k, e.type, e.cls, n); else forgetPool(k, e.type, e.cls, n); }
+    e[k] = 0;
+  });
+}
+function trimTags(e, stay){         // после уменьшения qty лишние метки снимаем; stay — пассажир остаётся на рейсе (u/d)
+  let ex = (e.sby||0) + (e.oth||0) + (e.upg||0) + (e.dng||0) - e.qty;
+  for(const k of ['dng','upg','oth','sby']){
+    if(ex<=0) break;
+    const d = Math.min(e[k]||0, ex); e[k] = (e[k]||0) - d; ex -= d;
+    if((k==='sby'||k==='oth') && d>0){ if(stay) forgetPool(k, e.type, e.cls, d); else returnToPool(k, e.type, e.cls, d); }
+  }
+}
+
+/* ---------- вывод ---------- */
+const mainCtl = e => `<span class="ctl">`
+  + `<span class="sq ${e.cls==='J'?'dn':'upg'}" data-k="chg">${e.cls==='J'?'d':'u'}</span>`
+  + `<span class="sq" data-k="dec">−</span><span class="sq" data-k="inc">+</span>`
+  + `<span class="x" data-k="del">✕</span></span>`;
+
+const POOL_HINT = {
+  sby:'Пусто. «+ Строка», затем укажите, кто ждёт: тип (M, F…) и класс. Кнопка ↓ забирает пассажира на рейс, ↑ возвращает.',
+  oth:'Пусто. «+ Строка»: кто с другого рейса — тип (M, F…) и класс. Кнопка ↓ забирает на наш рейс, ↑ возвращает.'
+};
+const canBack = r => (r.moved||0)>0 && entries.some(e=>e.act==='+' && e.type===r.type && e.cls===r.cls && e.qty>0);
+const poolCtl = r => `<span class="ctl">`
+  + `<span class="sq back${canBack(r)?'':' off'}" data-k="up">↑</span>`
+  + `<span class="sq go${r.qty>0?'':' off'}" data-k="down">↓</span>`
+  + `<span class="sq" data-k="dec">−</span><span class="sq" data-k="inc">+</span>`
+  + `<span class="x" data-k="del">✕</span></span>`;
+
+function renderPool(k){
+  let h = '';
+  P[k].forEach((r,i)=>{
+    const moved = r.moved||0;
+    h += `<div class="ln e" data-i="${i}"><span class="pre">`
+      + `<span class="t${r.qty===0?' z':''}" data-k="qty">${r.qty}</span> `
+      + `<span class="t" data-k="type">${r.type}</span> `
+      + `<span class="t cls ${r.cls}" data-k="cls">${r.cls}</span>`
+      + (moved>0 ? ` <span class="of">из ${r.qty+moved}</span>` : '')
+      + `</span>${poolCtl(r)}</div>`;
+  });
+  if(!P[k].length) h = `<div class="hint">${POOL_HINT[k]}</div>`;
+  $(k+'Box').innerHTML = h;
+}
+const othTag = () => { const f = ($('othFlt').value||'').trim(); return f ? `from flight ${esc(f)}.` : 'from other flight.'; };
+
+function renderLog(){
+  const groups = [];
+  entries.forEach(e=>{
+    const sb = Math.min(e.sby||0, e.qty);
+    const ot = Math.min(e.oth||0, e.qty-sb);
+    const up = Math.min(e.upg||0, e.qty-sb-ot);
+    const dn = Math.min(e.dng||0, e.qty-sb-ot-up);
+    const g = groups.find(x=>x.act===e.act && x.type===e.type && x.cls===e.cls);
+    if(g){ g.qty += e.qty; g.sby += sb; g.oth += ot; g.upg += up; g.dng += dn; }
+    else groups.push({act:e.act, type:e.type, cls:e.cls, qty:e.qty, sby:sb, oth:ot, upg:up, dng:dn});
+  });
+  const mk = (g, n, tag)=>{
+    const add = g.act==='+';
+    const cl = g.cls==='Y' ? (add?'в эконом класс':'с эконом класса') : (add?'в бизнес класс':'с бизнес класса');
+    return `<div class="${add?'ad':'rm'}">${add?'Добавили':'Сняли'} ${n} ${plural(n, NOUN[g.type])} ${cl}.${tag?' '+tag:''}</div>`;
+  };
+  const lines = [];
+  groups.forEach(g=>{
+    const rest = g.qty - g.sby - g.oth - g.upg - g.dng;
+    if(rest>0)   lines.push(mk(g, rest, ''));
+    if(g.sby>0)  lines.push(mk(g, g.sby, 'from SBY.'));
+    if(g.oth>0)  lines.push(mk(g, g.oth, othTag()));
+    if(g.upg>0)  lines.push(mk(g, g.upg, 'Upgrade.'));
+    if(g.dng>0)  lines.push(mk(g, g.dng, 'Downgrade.'));
+  });
+  if(P.sby.length){
+    const left = {Y:0, J:0};
+    P.sby.forEach(r=>{ left[r.cls] += r.qty; });
+    lines.push(`<div class="ot">SBY осталось: Y — ${left.Y}, J — ${left.J}</div>`);
+  }
+  $('log').innerHTML = lines.length ? lines.join('') : '<div class="empty">Пока пусто</div>';
+}
+function render(){
+  const {total, pax, net} = calc();
+  let h = `<div class="ln"><span class="pre">DESTINATION: <span class="t" data-k="dest">${esc(D())}</span>. Flight ${esc(fltText())}</span></div>`;
+  h += `<div class="ln"><span class="pre">Total ${total} pax</span></div>`;
+  entries.forEach((e,i)=>{
+    const neg = e.act==='-';
+    const sp = e.type==='B' ? '' : ' ';
+    h += `<div class="ln e" data-i="${i}"><span class="pre">`
+      + `<span class="t" data-k="dest">${esc(D())}</span> `
+      + `<span class="t act ${neg?'neg':'pos'}" data-k="act">${e.act}</span>`
+      + `<span class="q">${e.qty}</span>${sp}`
+      + `<span class="t" data-k="type">${e.type}</span> `
+      + `<span class="t cls ${e.cls}" data-k="cls">${e.cls}</span> `
+      + `<span class="t wt ${neg?'neg':'pos'}" data-k="wt">${e.act}${wOf(e.type)*e.qty}kg</span>`
+      + `</span>${mainCtl(e)}</div>`;
+  });
+  if(!entries.length) h += `<div class="hint">Нажмите «+ Строка», затем правьте строку касаниями: знак −/+, вес, Y/J, удержание на типе (M, F…), квадратики − и + для количества, u / d — перевод одного пассажира в бизнес / эконом.</div>`;
+  if(entries.length && net!==0) h += `<div class="ln"><span class="pre">${net<0?'–':'+'} ${Math.abs(net)} kg</span></div>`;
+  h += `<div class="ln tot"><span class="pre">Total pax ${pax}</span></div>`;
+  $('out').innerHTML = h;
+  POOLS.forEach(renderPool);
+  renderLog();
+  save();
+}
+
+/* ---------- всплывающие окошки ---------- */
+const pop = $('pop');
+function closePop(){ pop.style.display='none'; pop.innerHTML=''; pop.onclick=null; pop.className='pop'; }
+function placePop(el){
+  pop.style.display = 'flex';
+  const r = el.getBoundingClientRect();
+  const w = pop.offsetWidth, h = pop.offsetHeight;
+  let left = Math.min(Math.max(8, r.left + r.width/2 - w/2), window.innerWidth - w - 8);
+  let top = r.bottom + 6;
+  if(top + h > window.innerHeight - 8) top = Math.max(8, r.top - h - 6);
+  pop.style.left = left+'px'; pop.style.top = top+'px';
+}
+function openTypePicker(el, types, onPick){
+  pop.className = 'pop v';
+  pop.innerHTML = types.map(t=>`<button data-t="${t}">${t==='B'?'Bag':t}</button>`).join('');
+  pop.onclick = ev=>{ const b = ev.target.closest('button'); if(!b) return; closePop(); onPick(b.dataset.t); };
+  placePop(el);
+}
+function openDestEditor(el){
+  pop.className = 'pop';
+  pop.innerHTML = `<input id="destIn" value="${esc(dest)}" maxlength="4" autocapitalize="characters"><button id="destOk">OK</button>`;
+  pop.onclick = null;
+  placePop(el);
+  const inp = $('destIn');
+  inp.addEventListener('input', ()=>{
+    dest = inp.value.toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,4);
+    inp.value = dest; render();
+  });
+  inp.addEventListener('keydown', ev=>{ if(ev.key==='Enter') closePop(); });
+  $('destOk').onclick = closePop;
+  inp.focus(); inp.select();
+}
+document.addEventListener('pointerdown', ev=>{
+  if(pop.style.display!=='none' && !pop.contains(ev.target)) closePop();
+}, true);
+
+/* ---------- касания: основное окно ---------- */
+/* u / d: минус один пассажир (или багаж) в самой этой строке и плюс один в другом классе.
+   Строка «+»: её количество уменьшается на 1 (при 0 строка исчезает).
+   Строка «−»: в ней становится на одного снятого больше.
+   В другом классе плюсуем в существующую «+» строку того же типа, если нет — создаём. */
+function changeClass(i){
+  const e = entries[i];
+  if(!e) return;
+  const to = e.cls==='J' ? 'Y' : 'J', type = e.type;
+  snap();
+  if(e.act==='+'){
+    e.qty--;
+    trimTags(e, true);
+    if(e.qty<=0) entries.splice(i,1);
+  } else {
+    e.qty++;
+  }
+  const t = bump('+', type, to, 1);
+  if(to==='J') t.upg = (t.upg||0)+1; else t.dng = (t.dng||0)+1;
+  render();
+}
+function onTap(p){
+  if(p.k==='dest'){ openDestEditor(p.el); return; }
+  const e = entries[p.i];
+  if(p.k==='del'){ snap(); if(e && e.act==='+') dropPools(e,'return'); entries.splice(p.i,1); render(); return; }
+  if(!e) return;
+  if(p.k==='act'){ snap(); dropPools(e,'return'); e.act = e.act==='-' ? '+' : '-'; clearTags(e); render(); }
+  else if(p.k==='cls'){ snap(); dropPools(e,'forget'); e.cls = e.cls==='Y' ? 'J' : 'Y'; clearTags(e); render(); }
+  else if(p.k==='type'){ snap(); dropPools(e,'forget'); e.type = nextType(e.type, TYPES); clearTags(e); render(); }
+  else if(p.k==='chg') changeClass(p.i);
+  else if(p.k==='wt' || p.k==='inc'){ snap(); e.qty++; render(); }
+  else if(p.k==='dec'){ if(e.qty>1){ snap(); e.qty--; trimTags(e); render(); } }
+}
+function onHold(p){
+  const e = entries[p.i];
+  if(!e) return;
+  if(p.k==='type'){
+    openTypePicker(p.el, TYPES, t=>{ snap(); dropPools(e,'forget'); e.type = t; clearTags(e); render(); });
+  } else if(p.k==='wt'){
+    if(e.qty>1){ snap(); e.qty--; trimTags(e); render(); }
+  }
+  buzz();
+}
+
+/* ---------- касания: окна SBY и «с другого рейса» ---------- */
+function poolTake(k, i){          // ↓ забрать одного на рейс
+  const r = P[k][i];
+  if(!r || r.qty<1) return;
+  snap();
+  r.qty--; r.moved = (r.moved||0)+1;
+  const e = entries.find(x=>x.act==='+' && x.type===r.type && x.cls===r.cls);
+  if(e){ e.qty++; e[k] = (e[k]||0)+1; }
+  else { const n = {act:'+', type:r.type, cls:r.cls, qty:1}; n[k] = 1; entries.push(n); }
+  render();
+  $('out').scrollTop = $('out').scrollHeight;
+}
+function poolReturn(k, i){        // ↑ вернуть одного обратно
+  const r = P[k][i];
+  if(!r || !canBack(r)) return;
+  snap();
+  const same = x=>x.act==='+' && x.type===r.type && x.cls===r.cls && x.qty>0;
+  let j = entries.findIndex(x=>same(x) && (x[k]||0)>0);
+  if(j<0) j = entries.findIndex(same);
+  const e = entries[j];
+  e.qty--;
+  if((e[k]||0)>0) e[k]--;
+  trimTags(e);
+  if(e.qty<=0) entries.splice(j,1);
+  r.qty++; r.moved--;
+  render();
+}
+function poolDec(k, i){
+  const r = P[k][i];
+  if(r && r.qty>0){ snap(); r.qty--; render(); }
+}
+function onPoolTap(k, p){
+  const r = P[k][p.i];
+  if(p.k==='del'){ snap(); P[k].splice(p.i,1); render(); return; }
+  if(!r) return;
+  if(p.k==='down') poolTake(k, p.i);
+  else if(p.k==='up') poolReturn(k, p.i);
+  else if(p.k==='type'){ snap(); r.type = nextType(r.type, TYPES); r.moved = 0; render(); }
+  else if(p.k==='cls'){ snap(); r.cls = r.cls==='Y' ? 'J' : 'Y'; r.moved = 0; render(); }
+  else if(p.k==='qty' || p.k==='inc'){ snap(); r.qty++; render(); }
+  else if(p.k==='dec') poolDec(k, p.i);
+}
+function onPoolHold(k, p){
+  const r = P[k][p.i];
+  if(!r) return;
+  if(p.k==='type'){
+    openTypePicker(p.el, TYPES, t=>{ snap(); r.type = t; r.moved = 0; render(); });
+  } else if(p.k==='qty'){
+    poolDec(k, p.i);
+  }
+  buzz();
+}
+
+/* ---------- общий обработчик касаний/удержаний ---------- */
+const HOLD = 450;
+function bindWindow(box, api){
+  let press = null;
+  const cancel = ()=>{ if(press){ clearTimeout(press.timer); press = null; } };
+  box.addEventListener('pointerdown', ev=>{
+    const el = ev.target.closest('[data-k]');
+    if(!el) return;
+    const row = el.closest('[data-i]');
+    press = { k:el.dataset.k, i: row ? Number(row.dataset.i) : -1, el, x:ev.clientX, y:ev.clientY, held:false };
+    if(api.holdKeys.includes(press.k)){
+      const p = press;
+      p.timer = setTimeout(()=>{ p.held = true; api.hold(p); }, HOLD);
+    }
+  });
+  box.addEventListener('pointermove', ev=>{
+    if(press && Math.hypot(ev.clientX-press.x, ev.clientY-press.y) > 10) cancel();
+  });
+  box.addEventListener('pointerup', ()=>{
+    if(!press) return;
+    clearTimeout(press.timer);
+    const p = press; press = null;
+    if(!p.held) api.tap(p);
+  });
+  box.addEventListener('pointercancel', cancel);
+  box.addEventListener('contextmenu', ev=>ev.preventDefault());
+}
+bindWindow($('out'),    { holdKeys:['type','wt'], tap:onTap, hold:onHold });
+POOLS.forEach(k=>bindWindow($(k+'Box'), { holdKeys:['type','qty'], tap:p=>onPoolTap(k,p), hold:p=>onPoolHold(k,p) }));
+
+/* ---------- кнопки ---------- */
+$('add').onclick = ()=>{ snap(); entries.push({act:'-', type:'M', cls:'Y', qty:1}); render(); $('out').scrollTop = $('out').scrollHeight; };
+POOLS.forEach(k=>{
+  $(k+'Add').onclick = ()=>{ snap(); P[k].push({type:'M', cls:'Y', qty:1, moved:0}); render(); $(k+'Box').scrollTop = $(k+'Box').scrollHeight; };
+});
+$('undo').onclick = ()=>{
+  if(!snaps.length) return;
+  const s = JSON.parse(snaps.pop());
+  entries = s.e; P = s.p; render();
+};
+$('clr').onclick = ()=>{
+  if(!entries.length) return;
+  snap();
+  entries.forEach(e=>{ if(e.act==='+') dropPools(e,'return'); });
+  entries = [];
+  render();
+};
+function copyText(txt){
+  return navigator.clipboard.writeText(txt).catch(()=>{
+    const a = document.createElement('textarea'); a.value = txt; document.body.appendChild(a); a.select();
+    try{ document.execCommand('copy'); }catch(_){}
+    a.remove();
+  });
+}
+function flash(btn, text, back){ btn.textContent = text; setTimeout(()=>btn.textContent = back, 1500); }
+$('copy').onclick = async ()=>{ await copyText(plain()); flash($('copy'), 'Скопировано ✓', 'Копировать'); };
+['flt','othFlt','total',...TYPES.map(t=>'w_'+t)].forEach(id=>$(id).addEventListener('input', ()=>render()));
+
+/* кнопка с подтверждением: первое нажатие «Точно?», второе выполняет действие */
+function confirmBtn(btn, action){
+  const label = btn.textContent; let t = null;
+  btn.addEventListener('click', ()=>{
+    if(btn.dataset.arm){ clearTimeout(t); delete btn.dataset.arm; btn.textContent = label; action(); }
+    else { btn.dataset.arm = '1'; btn.textContent = 'Точно?'; t = setTimeout(()=>{ delete btn.dataset.arm; btn.textContent = label; }, 2000); }
+  });
+}
+
+/* ================= панели: заметки и альбом ================= */
+function openSheet(id){ $(id).classList.add('open'); }
+function closeSheet(id){ $(id).classList.remove('open'); }
+document.querySelectorAll('[data-close]').forEach(b=>b.addEventListener('click', ()=>closeSheet(b.dataset.close)));
+
+/* --- заметки --- */
+let noteText = '';
+try{ noteText = localStorage.getItem('pax_notes') || ''; }catch(e){}
+$('btnNotes').onclick = ()=>{ $('noteTa').value = noteText; openSheet('sheetNotes'); };
+$('noteTa').addEventListener('input', ()=>{
+  noteText = $('noteTa').value;
+  try{ localStorage.setItem('pax_notes', noteText); }catch(e){}
+});
+$('noteCopy').onclick = async ()=>{ await copyText($('noteTa').value); flash($('noteCopy'), 'Скопировано ✓', 'Копировать'); };
+confirmBtn($('noteClr'), ()=>{ noteText = ''; $('noteTa').value = ''; try{ localStorage.setItem('pax_notes',''); }catch(e){} });
+
+/* --- альбом для рисования: страницы, штрихи хранятся в долях ширины холста --- */
+const cv = $('cv'), ctx = cv.getContext('2d');
+let album = {pages:[{s:[]}], cur:0};
+try{
+  const a = JSON.parse(localStorage.getItem('pax_album'));
+  if(a && Array.isArray(a.pages) && a.pages.length){ album = a; if(!(album.cur>=0 && album.cur<album.pages.length)) album.cur = 0; }
+}catch(e){}
+let tool = {color:'#1b2430', w:4, eraser:false};
+let cur = null, W = 0;                     // cur — штрих, который сейчас рисуем; W — ширина холста в CSS-пикселях
+const page = () => album.pages[album.cur];
+function saveAlbum(){ try{ localStorage.setItem('pax_album', JSON.stringify(album)); }catch(e){} }
+function lineW(s){ return s.w * W / 400; }
+const mid = (a,b)=>[(a[0]+b[0])/2, (a[1]+b[1])/2];
+function pt(s,i){ return [s.p[i*2]*W, s.p[i*2+1]*W]; }
+function drawSeg(s, n){                    // дорисовать n-ю точку штриха (n = число точек)
+  ctx.strokeStyle = s.c; ctx.lineWidth = lineW(s); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  ctx.beginPath();
+  if(n===1){ const a = pt(s,0); ctx.moveTo(a[0], a[1]); ctx.lineTo(a[0]+0.01, a[1]); }
+  else if(n===2){ const a = pt(s,0), b = pt(s,1), m = mid(a,b); ctx.moveTo(a[0], a[1]); ctx.lineTo(m[0], m[1]); }
+  else {
+    const a = pt(s,n-3), b = pt(s,n-2), c = pt(s,n-1), m0 = mid(a,b), m1 = mid(b,c);
+    ctx.moveTo(m0[0], m0[1]); ctx.quadraticCurveTo(b[0], b[1], m1[0], m1[1]);
+  }
+  ctx.stroke();
+}
+function drawStroke(s){
+  const n = s.p.length/2;
+  for(let i=1;i<=n;i++) drawSeg(s, i);
+  if(n>=2){                                 // хвост до последней точки
+    const a = pt(s,n-2), b = pt(s,n-1), m = mid(a,b);
+    ctx.beginPath(); ctx.moveTo(m[0], m[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
+  }
+}
+function fitCanvas(){
+  const r = cv.getBoundingClientRect();
+  if(r.width<2) return;
+  const dpr = Math.min(window.devicePixelRatio||1, 3);
+  W = r.width;
+  cv.width = Math.round(r.width*dpr); cv.height = Math.round(r.height*dpr);
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  redraw();
+}
+function redraw(){
+  ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, cv.width, cv.height);
+  page().s.forEach(drawStroke);
+}
+function updateTitle(){
+  $('pgTitle').textContent = `Стр. ${album.cur+1} / ${album.pages.length}`;
+  $('pgPrev').style.opacity = album.cur>0 ? 1 : .35;
+  $('pgNext').style.opacity = album.cur<album.pages.length-1 ? 1 : .35;
+}
+function canvasPos(ev){
+  const r = cv.getBoundingClientRect();
+  return [Math.round((ev.clientX-r.left)/r.width*1000)/1000, Math.round((ev.clientY-r.top)/r.width*1000)/1000];
+}
+cv.addEventListener('pointerdown', ev=>{
+  ev.preventDefault();
+  try{ cv.setPointerCapture(ev.pointerId); }catch(_){}
+  const p = canvasPos(ev);
+  cur = {c: tool.eraser ? '#ffffff' : tool.color, w: tool.eraser ? 26 : tool.w, p:[p[0], p[1]]};
+  page().s.push(cur);
+  drawSeg(cur, 1);
+});
+cv.addEventListener('pointermove', ev=>{
+  if(!cur) return;
+  ev.preventDefault();
+  const evs = ev.getCoalescedEvents ? ev.getCoalescedEvents() : [ev];
+  (evs.length ? evs : [ev]).forEach(e=>{
+    const p = canvasPos(e);
+    const n = cur.p.length/2, lx = cur.p[n*2-2], ly = cur.p[n*2-1];
+    if(Math.abs(p[0]-lx) < 0.001 && Math.abs(p[1]-ly) < 0.001) return;
+    cur.p.push(p[0], p[1]);
+    drawSeg(cur, cur.p.length/2);
+  });
+});
+const endStroke = ()=>{ if(cur){ cur = null; saveAlbum(); } };
+cv.addEventListener('pointerup', endStroke);
+cv.addEventListener('pointercancel', endStroke);
+cv.addEventListener('contextmenu', ev=>ev.preventDefault());
+
+document.querySelectorAll('.clr[data-c]').forEach(b=>b.addEventListener('click', ()=>{
+  tool.color = b.dataset.c; tool.eraser = false;
+  document.querySelectorAll('.clr').forEach(x=>x.classList.toggle('on', x===b));
+}));
+$('eraser').addEventListener('click', ()=>{
+  tool.eraser = true;
+  document.querySelectorAll('.clr').forEach(x=>x.classList.toggle('on', x===$('eraser')));
+});
+document.querySelectorAll('.wd').forEach(b=>b.addEventListener('click', ()=>{
+  tool.w = Number(b.dataset.w);
+  document.querySelectorAll('.wd').forEach(x=>x.classList.toggle('on', x===b));
+}));
+$('cvUndo').onclick = ()=>{ if(page().s.length){ page().s.pop(); redraw(); saveAlbum(); } };
+confirmBtn($('cvClr'), ()=>{ page().s = []; redraw(); saveAlbum(); });
+confirmBtn($('pgDel'), ()=>{
+  if(album.pages.length>1){ album.pages.splice(album.cur,1); album.cur = Math.min(album.cur, album.pages.length-1); }
+  else page().s = [];
+  updateTitle(); redraw(); saveAlbum();
+});
+$('pgPrev').onclick = ()=>{ if(album.cur>0){ album.cur--; updateTitle(); redraw(); saveAlbum(); } };
+$('pgNext').onclick = ()=>{ if(album.cur<album.pages.length-1){ album.cur++; updateTitle(); redraw(); saveAlbum(); } };
+$('pgNew').onclick = ()=>{ album.pages.push({s:[]}); album.cur = album.pages.length-1; updateTitle(); redraw(); saveAlbum(); };
+$('btnAlbum').onclick = ()=>{ openSheet('sheetAlbum'); updateTitle(); fitCanvas(); };
+window.addEventListener('resize', ()=>{ if($('sheetAlbum').classList.contains('open')) fitCanvas(); });
+
+load(); render();
+</script>
+</body>
+</html>
