@@ -85,6 +85,14 @@
   /* панели: заметки и альбом */
   .sheet { position:fixed; inset:0; z-index:100; background:#f2f4f7; display:none; flex-direction:column; gap:8px; padding:10px 10px calc(10px + env(safe-area-inset-bottom)); }
   .sheet.open { display:flex; }
+  .netcard { background:#fff; border:1px solid #dde2e8; border-radius:10px; padding:10px; overflow:auto; -webkit-user-select:text; user-select:text; }
+  #netRes { font-family:ui-monospace,Menlo,Consolas,monospace; font-size:14px; line-height:1.6; flex:0 1 auto; max-height:55%; }
+  #netRes .ln { display:block; padding:1px 0; } #netRes .neg { color:#c62828; font-weight:700; } #netRes .pos { color:#2e7d32; font-weight:700; }
+  #netRes .cJ { color:#f08a00; font-weight:700; } #netRes .cY { color:#2e9e4f; font-weight:700; }
+  #netCom { flex:0 1 auto; font-size:13px; line-height:1.5; color:#3a4654; }
+  #netCom .h { font-size:10px; color:#6b7785; text-transform:uppercase; margin-bottom:4px; }
+  #netCom .it { margin:0 0 5px; } #netCom .ok { color:#6b7785; }
+  .mini.alt { background:#fff; color:#1f6feb; }
   .sh-head { display:flex; align-items:center; gap:6px; }
   .sh-title { font-weight:700; font-size:15px; }
   .sh-b { border:1px solid #dde2e8; background:#fff; font:inherit; font-size:13px; padding:8px 12px; border-radius:8px; color:#1b2430; }
@@ -171,6 +179,14 @@
 </div>
 
 <div class="pop" id="pop"></div>
+
+<!-- Взаимозачёт -->
+<div class="sheet" id="sheetNet">
+  <div class="sh-head"><span class="sh-title">Взаимозачёт</span><button class="sh-x" data-close="sheetNet" aria-label="Закрыть">✕</button></div>
+  <div class="netcard" id="netRes"></div>
+  <div class="netcard" id="netCom"></div>
+  <div class="sh-foot"><button class="sh-b" id="netCopy">Копировать</button><button class="sh-b" data-close="sheetNet">Закрыть</button></div>
+</div>
 
 <!-- Заметки -->
 <div class="sheet" id="sheetNotes">
@@ -316,6 +332,78 @@ function plain(){
   if(entries.length && net!==0) L.push(`${net<0?'–':'+'} ${Math.abs(net)} kg`);
   L.push(`Total pax ${pax}`);
   return L.join('\n');
+}
+
+/* ---------- взаимозачёт: снятое и добавленное по одной позиции (тип + класс, у багажа ещё и вес) гасят друг друга ---------- */
+function netting(){
+  const by = {}, order = [];
+  entries.forEach(e=>{
+    if(e.qty<=0) return;
+    const key = e.type+'|'+e.cls;
+    if(!by[key]) by[key] = {type:e.type, cls:e.cls, plus:[], minus:[], cut:[]};
+    if(!order.some(o=>o.act===e.act && o.key===key)) order.push({act:e.act, key});
+    const list = e.act==='+' ? by[key].plus : by[key].minus;
+    if(e.type==='B') bagList(e).forEach(w=>list.push(w)); else for(let i=0;i<e.qty;i++) list.push(wOf(e.type));
+  });
+  const stat = {};
+  Object.keys(by).forEach(key=>{
+    const g = by[key];
+    stat[key] = {np:g.plus.length, nm:g.minus.length};
+    const plus = g.plus.slice(), minus = [];
+    g.minus.forEach(w=>{ const j = plus.indexOf(w); if(j>=0){ plus.splice(j,1); g.cut.push(w); } else minus.push(w); });
+    g.plus = plus; g.minus = minus;
+  });
+  const rows = [];
+  order.forEach(o=>{
+    const g = by[o.key], list = o.act==='+' ? g.plus : g.minus;
+    if(list.length) rows.push({act:o.act, type:g.type, cls:g.cls, qty:list.length, kg:Math.round(list.reduce((a,b)=>a+b,0)*100)/100});
+  });
+  return {rows, by, stat};
+}
+function netTexts(){
+  const {total, pax, net} = calc();
+  const R = netting();
+  let kg = 0;
+  R.rows.forEach(r=>{ kg += r.act==='-' ? -r.kg : r.kg; });
+  const rowT = r => `${D()} ${r.act}${r.qty}${r.type==='B' ? '' : ' '}${r.type} ${r.cls} ${r.act}${r.kg}kg`;
+  const L = [`DESTINATION: ${D()}. Flight ${fltText()}`, `Total ${total} pax`];
+  R.rows.forEach(r=>L.push(rowT(r)));
+  if(R.rows.length && kg!==0) L.push(`${kg<0?'–':'+'} ${Math.abs(kg)} kg`);
+  L.push(`Total pax ${pax}`);
+  const html = [
+    `<div class="ln">DESTINATION: ${esc(D())}. Flight ${esc(fltText())}</div>`,
+    `<div class="ln">Total ${total} pax</div>`,
+    ...R.rows.map(r=>`<div class="ln pre">${esc(D())} <span class="${r.act==='-'?'neg':'pos'}">${r.act}${r.qty}</span>${r.type==='B'?'':' '}${r.type} <span class="c${r.cls}">${r.cls}</span> <span class="${r.act==='-'?'neg':'pos'}">${r.act}${r.kg}kg</span></div>`),
+    (R.rows.length && kg!==0) ? `<div class="ln">${kg<0?'–':'+'} ${Math.abs(kg)} kg</div>` : '',
+    `<div class="ln"><b>Total pax ${pax}</b></div>`
+  ].join('');
+  // комментарии: что именно погасилось
+  const C = [];
+  Object.keys(R.by).forEach(key=>{
+    const g = R.by[key], st = R.stat[key], c = g.cut.length;
+    if(c>0){
+      const ws = [...new Set(g.cut)].sort((a,b)=>a-b).map(w=>w+' kg').join(', ');
+      const left = g.plus.length - g.minus.length;
+      let t = `<b>${g.type} ${g.cls}</b>: снято ${st.nm}, добавлено ${st.np} — взаимно погасились ${c} (${ws}).`;
+      if(g.plus.length+g.minus.length===0) t += ' Строки убраны: итог по позиции 0.';
+      else t += ` Осталось ${left>0?'+':'−'}${Math.abs(left)} ${g.type} ${g.cls}` + (g.type==='B' ? ` (${g.plus.length+g.minus.length>1?'разный вес не гасится':'вес не совпал'})` : '') + '.';
+      C.push(`<div class="it">${t}</div>`);
+    } else if(g.type==='B' && g.plus.length && g.minus.length){
+      C.push(`<div class="it"><b>B ${g.cls}</b>: багаж снят и добавлен, но с разным весом — не гасится.</div>`);
+    }
+  });
+  const any = entries.some(e=>e.qty>0);
+  const cmt = !any ? '<div class="it ok">Пока нет изменений.</div>'
+    : (C.length ? C.join('') + `<div class="it ok">Итоги не меняются: ${kg<0?'–':'+'} ${Math.abs(kg)} kg, Total pax ${pax}. Данные в центральном окне остались прежними.</div>`
+                : '<div class="it ok">Взаимозачёта нет: встречных пар (снято и добавлено по одной позиции) нет. Данные в центральном окне остались прежними.</div>');
+  return {text:L.join('\n'), html, cmt, kg, pax, net};
+}
+let netTxt = '';
+function openNet(){
+  const r = netTexts(); netTxt = r.text;
+  $('netRes').innerHTML = r.html;
+  $('netCom').innerHTML = '<div class="h">Комментарии</div>' + r.cmt;
+  openSheet('sheetNet');
 }
 
 /* ---------- метки строки «+»: из SBY (sby), с другого рейса (oth), upgrade (upg), downgrade (dng) ---------- */
@@ -529,7 +617,7 @@ function render(){
   if(!entries.some(e=>e.qty>0)) h += `<div class="hint">Нажмите «+ Строка», затем правьте строку касаниями: знак −/+, вес, Y/J, удержание на типе (M, F…), квадратики − и + для количества, u / d — перевод одного пассажира в бизнес / эконом.</div>`;
   h += `<div class="foot">`;                                      // итог закреплён внизу окна: не прячется под ползунок
   if(entries.some(e=>e.qty>0) && net!==0) h += `<div class="ln"><span class="pre">${net<0?'–':'+'} ${Math.abs(net)} kg</span></div>`;
-  h += `<div class="ln tot"><span class="pre">Total pax ${pax}</span></div></div>`;
+  h += `<div class="ln tot"><span class="pre">Total pax ${pax}</span><button class="mini alt" data-k="net">⇄ Взаимозачёт</button></div></div>`;
   $('out').innerHTML = h;
   POOLS.forEach(renderPool);
   renderLog();
@@ -599,6 +687,7 @@ function changeClass(i){
   render();
 }
 function onTap(p){
+  if(p.k==='net'){ openNet(); return; }
   if(p.k==='dest'){ openDestEditor(p.el); return; }
   const e = entries[p.i];
   if(p.k==='del'){ snap(); if(e && e.act==='+') dropPools(e,'return'); entries.splice(p.i,1); render(); return; }
@@ -801,6 +890,7 @@ document.querySelectorAll('[data-close]').forEach(b=>b.addEventListener('click',
 /* --- заметки --- */
 let noteText = '';
 try{ noteText = localStorage.getItem('pax_notes') || ''; }catch(e){}
+$('netCopy').onclick = async ()=>{ await copyText(netTxt); flash($('netCopy'), 'Скопировано ✓', 'Копировать'); };
 $('btnNotes').onclick = ()=>{ $('noteTa').value = noteText; openSheet('sheetNotes'); };
 $('noteTa').addEventListener('input', ()=>{
   noteText = $('noteTa').value;
