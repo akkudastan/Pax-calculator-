@@ -18,8 +18,10 @@
   /* окошки со строками */
   .win { font-family:ui-monospace,Menlo,Consolas,monospace; font-size:14px; line-height:1.5; overflow:auto;
          -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; }
-  #out { min-height:110px; max-height:calc(100vh - 540px); }
-  #sbyBox, #othBox { min-height:30px; max-height:96px; }
+  #out { min-height:110px; max-height:466px; }   /* растёт до 10 строк, дальше ползунок; итог закреплён */
+  #out .foot { position:sticky; bottom:0; background:#fff; border-top:1px solid #eef1f5; }
+  #othBox { min-height:30px; max-height:96px; }
+  #sbyBox { min-height:30px; max-height:262px; }   /* растёт со строками до 7 (7×36.5px), дальше ползунок */
   .ln { display:flex; justify-content:space-between; align-items:center; padding:1px 0; }
   .ln.e { padding:3px 0; }
   .pre { white-space:pre; }
@@ -27,6 +29,7 @@
   .t { padding:4px 2px; border-radius:5px; cursor:pointer; }
   .t:active { background:#dbe7ff; }
   .q { padding:4px 2px; }
+  .q.z { color:#2e9e4f; font-weight:700; }
   .t.act.neg, .t.wt.neg { color:#c62828; font-weight:600; }
   .t.act.pos, .t.wt.pos { color:#2e7d32; font-weight:600; }
   .t.cls.Y { color:#2e9e4f; font-weight:700; }
@@ -123,7 +126,7 @@
   <!-- окошко: пассажиры с другого рейса -->
   <div class="card">
     <div class="sbyhead">
-      <span class="clsname">С другого рейса</span>
+      <span class="cnt"><b id="othCnt">0</b><span class="cnt-l">С ДРУГОГО РЕЙСА</span><span class="of" id="othBrk"></span></span>
       <button class="mini" id="othAdd">+ Строка</button>
     </div>
     <div class="win" id="othBox"></div>
@@ -231,11 +234,23 @@ function plural(n, f){
 const esc = s => String(s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const wOf = t => Number($('w_'+t).value) || 0;
 /* вес одной единицы: багаж (B) может иметь свой вес (поле kg), иначе берём общий «Bag kg» */
-const unitE = e => (e.type==='B' && e.kg!=null) ? e.kg : wOf(e.type);
+/* багаж в центральном окне: строка хранит «магазин» весов e.kgs (по одному на каждый багаж, null = вес по умолчанию «Bag kg»);
+   вес строки = сумма. Убираем багаж с конца магазина (последний добавленный — первым). */
+function normK(e){ if(e.type!=='B') return null; const a = Array.isArray(e.kgs) ? e.kgs : []; while(a.length<e.qty) a.push(null); a.length = Math.max(e.qty,0); e.kgs = a; return a; }
+const bagList = e => { const a = normK(e); return a.map(k=>k==null ? wOf('B') : k); };
+const entW = e => Math.round((e.type==='B' ? bagList(e).reduce((x,y)=>x+y,0) : wOf(e.type)*e.qty) * 100) / 100;
+const hasBag = (e, u) => bagList(e).some(k=>k===u);
+function addUnit(e, w){ if(e.type==='B'){ normK(e); e.kgs.push(w==null ? null : w); } e.qty++; }
+function popUnit(e, idx){            /* убрать одну штуку (по умолчанию последнюю); вернуть её вес */
+  let w;
+  if(e.type==='B'){ const a = normK(e); const i = (idx==null || idx<0) ? a.length-1 : idx; const k = a.splice(i,1)[0]; w = k==null ? wOf('B') : k; }
+  else w = wOf(e.type);
+  e.qty--; return w;
+}
 const unitR = r => (r.type==='B' && r.kg!=null) ? r.kg : wOf(r.type);
 /* в окне SBY показываем общий вес строки: вес одной штуки × количество (при 0 — вес одной штуки) */
 const bagTotal = r => Math.round(unitR(r) * Math.max(r.qty,1) * 10) / 10;
-const sameRowEntry = (e, r) => e.type===r.type && e.cls===r.cls && (e.type!=='B' || unitE(e)===unitR(r));
+const sameRowEntry = (e, r) => e.type===r.type && e.cls===r.cls && (e.type!=='B' || hasBag(e, unitR(r)));
 function snap(){ snaps.push(JSON.stringify({e:entries, p:P})); if(snaps.length>100) snaps.shift(); }
 const nextType = (t, list) => list[(list.indexOf(t)+1) % list.length];
 function buzz(){ if(navigator.vibrate) try{ navigator.vibrate(15); }catch(_){} }
@@ -250,6 +265,10 @@ function load(){
     const d = JSON.parse(localStorage.getItem('pax4'));
     if(!d) return;
     entries = d.entries||[];
+    entries.forEach(e=>{                                 // прошлая версия: у багажа был один вес на всю строку
+      if(e.type==='B'){ if(!Array.isArray(e.kgs)) e.kgs = Array(e.qty).fill(e.kg!=null ? e.kg : null); }
+      delete e.kg;
+    });
     P.sby = normRows(d.sbyRows); P.oth = normRows(d.othRows);
     dest = (d.dest===undefined ? 'DEST' : d.dest).toUpperCase();
     $('flt').value = d.flt||''; $('total').value = d.total||'';
@@ -260,6 +279,16 @@ function load(){
     }
     entries.forEach(e=>{ if((e.oth||0)>0 && !e.othF) e.othF = {'': e.oth}; });
     if(d.w) TYPES.forEach((t,i)=>{ if(d.w[i]!==undefined) $('w_'+t).value = d.w[i]; });
+    {                                                    // багаж в SBY: вес вписанный (был общий — фиксируем), одна строка = один багаж
+      const gB = Number($('w_B').value)||0, out = [];
+      P.sby.forEach(r=>{
+        if(r.type!=='B'){ out.push(r); return; }
+        if(r.kg==null) r.kg = gB;
+        if(r.qty>1 && !(r.moved>0)){ const u = r.kg; for(let i=0;i<r.qty;i++) out.push({type:'B', cls:r.cls, qty:1, moved:0, kg:u}); }
+        else out.push(r);
+      });
+      P.sby = out;
+    }
   }catch(e){}
 }
 
@@ -269,7 +298,7 @@ function calc(){
   const total = Number($('total').value)||0;
   let pax = total, net = 0;
   entries.forEach(e=>{
-    const w = unitE(e)*e.qty;
+    const w = entW(e);
     net += e.act==='-' ? -w : w;
     if(e.type!=='B') pax += e.act==='-' ? -e.qty : e.qty;
   });
@@ -278,26 +307,27 @@ function calc(){
 const fltText = () => ($('flt').value||'').trim() || '—';
 function rowText(e){
   const sp = e.type==='B' ? '' : ' ';
-  return `${D()} ${e.act}${e.qty}${sp}${e.type} ${e.cls} ${e.act}${unitE(e)*e.qty}kg`;
+  return `${D()} ${e.act}${e.qty}${sp}${e.type} ${e.cls} ${e.act}${entW(e)}kg`;
 }
 function plain(){
   const {total, pax, net} = calc();
   const L = [`DESTINATION: ${D()}. Flight ${fltText()}`, `Total ${total} pax`];
-  entries.forEach(e=>L.push(rowText(e)));
+  entries.forEach(e=>{ if(e.qty>0) L.push(rowText(e)); });
   if(entries.length && net!==0) L.push(`${net<0?'–':'+'} ${Math.abs(net)} kg`);
   L.push(`Total pax ${pax}`);
   return L.join('\n');
 }
 
 /* ---------- метки строки «+»: из SBY (sby), с другого рейса (oth), upgrade (upg), downgrade (dng) ---------- */
-function bump(act, type, cls, n, src){
-  const u = src ? unitE(src) : wOf(type);
-  let x = entries.find(e=>e.act===act && e.type===type && e.cls===cls && (type!=='B' || unitE(e)===u));
-  if(x) x.qty += n;
-  else { x = {act, type, cls, qty:n}; if(type==='B' && src && src.kg!=null) x.kg = src.kg; entries.push(x); }
+function bump(act, type, cls, n, w){
+  let x = entries.find(e=>e.act===act && e.type===type && e.cls===cls);
+  if(!x){ x = {act, type, cls, qty:0}; entries.push(x); }
+  for(let i=0;i<n;i++) addUnit(x, w);
   return x;
 }
-function clearTags(e){ e.sby = 0; e.oth = 0; e.othF = {}; e.upg = 0; e.dng = 0; }
+function clearTags(e){ e.sby = 0; e.oth = 0; e.othF = {}; e.upg = 0; e.dng = 0; e.gone = 0; }
+/* e.gone — сколько человек ушло из этой строки через u / d: метки «из SBY» и «с другого рейса» принадлежат рейсу, а не строке,
+   поэтому апгрейд/даунгрейд их не трогает (в итоге «из SBY» остаётся столько же, сколько забрали) */
 /* метка «с другого рейса» хранится по номерам рейсов: e.othF = {'KC123': 2, '': 1}, e.oth — сумма */
 const othN = (e, fl) => (e.othF && e.othF[fl]) || 0;
 function othAdd(e, fl, d){
@@ -323,7 +353,7 @@ function returnToPool(k, type, cls, n, unit, fl){
     if(r) r.qty += n;
     else {
       const nr = {type, cls, qty:n, moved:0};
-      if(type==='B' && unit!==wOf('B')) nr.kg = unit;
+      if(type==='B' && (k==='sby' || unit!==wOf('B'))) nr.kg = unit;
       if(k==='oth' && fl) nr.fl = fl;
       rows.push(nr);
     }
@@ -338,21 +368,37 @@ function forgetPool(k, type, cls, n, unit, fl){
     }
   }
 }
-function dropPools(e, mode){        // 'return' — вернуть в окна, 'forget' — остаются на рейсе
-  const u = unitE(e);
-  const n = Math.min(e.sby||0, e.qty);
-  if(n>0){ if(mode==='return') returnToPool('sby', e.type, e.cls, n, u); else forgetPool('sby', e.type, e.cls, n, u); }
-  e.sby = 0;
-  Object.keys(e.othF||{}).forEach(fl=>{
-    const c = othN(e, fl);
-    if(c>0){ if(mode==='return') returnToPool('oth', e.type, e.cls, c, u, fl); else forgetPool('oth', e.type, e.cls, c, u, fl); }
-  });
-  e.oth = 0; e.othF = {};
+/* вернуть «лишних» в окна после отмены апгрейда/даунгрейда: человек из строки cls вернулся/исчез — гасим кредит gone */
+function releaseGone(type, cls, n){
+  for(const x of entries){
+    if(n<=0) break;
+    if(x.act==='+' && x.type===type && x.cls===cls && (x.gone||0)>0){
+      const m = Math.min(n, x.gone); x.gone -= m; n -= m;
+      trimTags(x, false);
+    }
+  }
 }
-function trimTags(e, stay){         // после уменьшения qty лишние метки снимаем; stay — пассажир остаётся на рейсе (u/d)
-  let ex = (e.sby||0) + (e.oth||0) + (e.upg||0) + (e.dng||0) - e.qty;
-  const u = unitE(e);
-  const back = (k, d, fl)=>{ if(stay) forgetPool(k, e.type, e.cls, d, u, fl); else returnToPool(k, e.type, e.cls, d, u, fl); };
+function dropPools(e, mode){        // 'return' — вернуть в окна, 'forget' — остаются на рейсе
+  const units = e.type==='B' ? bagList(e).reverse() : [];
+  const nu = () => units.length ? units.shift() : wOf(e.type);
+  const give = (k, c, fl)=>{ for(let i=0;i<c;i++){ const u = nu(); if(mode==='return') returnToPool(k, e.type, e.cls, 1, u, fl); else forgetPool(k, e.type, e.cls, 1, u, fl); } };
+  let cap = mode==='return' ? e.qty : e.qty + (e.gone||0);   // возвращаем только тех, кто ещё в строке; «забыть» — и ушедших через u/d
+  const n = Math.min(e.sby||0, cap);
+  if(n>0){ give('sby', n, ''); cap -= n; }
+  e.sby = 0;
+  Object.keys(e.othF||{}).forEach(fl=>{ const c = Math.min(othN(e, fl), Math.max(cap,0)); if(c>0){ give('oth', c, fl); cap -= c; } });
+  const ud = Math.min((e.upg||0)+(e.dng||0), e.qty);
+  if(ud>0) releaseGone(e.type, e.cls==='J' ? 'Y' : 'J', ud);
+  e.oth = 0; e.othF = {}; e.gone = 0;
+}
+/* после уменьшения qty лишние метки снимаем; stay — пассажир остаётся на рейсе (u/d);
+   popped — веса только что убранных багажей (последний добавленный — первым).
+   Допустимо меток не больше, чем людей в строке плюс ушедших из неё через u/d (gone) */
+function trimTags(e, stay, popped){
+  popped = (popped||[]).slice();
+  let ex = (e.sby||0) + (e.oth||0) + (e.upg||0) + (e.dng||0) - e.qty - (e.gone||0);
+  const nu = () => popped.length ? popped.shift() : wOf(e.type);
+  const back = (k, d, fl)=>{ for(let i=0;i<d;i++){ const u = nu(); if(stay) forgetPool(k, e.type, e.cls, 1, u, fl); else returnToPool(k, e.type, e.cls, 1, u, fl); } };
   for(const k of ['dng','upg','oth','sby']){
     if(ex<=0) break;
     if(k==='oth'){
@@ -364,6 +410,7 @@ function trimTags(e, stay){         // после уменьшения qty ли�
     } else {
       const d = Math.min(e[k]||0, ex); e[k] = (e[k]||0) - d; ex -= d;
       if(k==='sby' && d>0) back('sby', d, '');
+      else if(d>0){ for(let i=0;i<d;i++) nu(); releaseGone(e.type, k==='upg' ? 'Y' : 'J', d); }
     }
   }
 }
@@ -375,30 +422,30 @@ const mainCtl = e => `<span class="ctl">`
   + `<span class="x" data-k="del">✕</span></span>`;
 
 const POOL_HINT = {
-  sby:'Пусто. «+ Строка», затем укажите, кто ждёт: тип (M, F…) и класс. Кнопка ↓ забирает пассажира на рейс, ↑ возвращает.',
+  sby:'Пусто. «+ Строка», затем укажите, кто ждёт: тип (M, F…) и класс. Кнопка ↓ забирает пассажира на рейс, ↑ возвращает. Багаж: одна строка = один багаж, вес по умолчанию 20 кг, при необходимости измените.',
   oth:'Пусто. «+ Строка»: кто с другого рейса — тип (M, F…), класс и номер рейса (можно из нескольких рейсов). Кнопка ↓ забирает на наш рейс, ↑ возвращает.'
 };
 const canBack = r => (r.moved||0)>0 && entries.some(e=>e.act==='+' && sameRowEntry(e,r) && e.qty>0);
-const poolCtl = r => `<span class="ctl">`
+const poolCtl = (k, r) => { const fixed = (k==='sby' && r.type==='B'); return `<span class="ctl">`
   + `<span class="sq back${canBack(r)?'':' off'}" data-k="up">↑</span>`
   + `<span class="sq go${r.qty>0?'':' off'}" data-k="down">↓</span>`
-  + `<span class="sq" data-k="dec">−</span><span class="sq" data-k="inc">+</span>`
-  + `<span class="x" data-k="del">✕</span></span>`;
+  + `<span class="sq${fixed?' off':''}" data-k="dec">−</span><span class="sq${fixed?' off':''}" data-k="inc">+</span>`
+  + `<span class="x" data-k="del">✕</span></span>`; };
 
 function renderPool(k){
   let h = '';
   P[k].forEach((r,i)=>{
     const moved = r.moved||0;
-    const zero = (k==='sby' && r.qty===0) ? ' zero' : '';
+    const zero = (r.qty===0) ? ' zero' : '';
     h += `<div class="ln e${zero}" data-i="${i}"><span class="pre${k==='oth'?' wrapok':''}">`
-      + (k==='sby' ? `<span class="num">${i+1}.</span>` : '')
-      + `<span class="t${r.qty===0?' z':''}" data-k="qty">${r.qty}</span> `
+      + `<span class="num">${i+1}.</span>`
+      + ((k==='sby' && r.type==='B') ? `<span class="q${r.qty===0?' z':''}">${r.qty}</span> ` : `<span class="t${r.qty===0?' z':''}" data-k="qty">${r.qty}</span> `)
       + `<span class="t" data-k="type">${r.type}</span> `
       + `<span class="t cls ${r.cls}" data-k="cls">${r.cls}</span>`
       + (k==='oth' ? `<input class="fl" type="text" inputmode="text" maxlength="7" autocapitalize="characters" autocomplete="off" placeholder="рейс" value="${esc(r.fl||'')}" aria-label="Номер рейса">` : '')
       + (r.type==='B' ? `<input class="wk" type="number" inputmode="numeric" min="0" value="${bagTotal(r)}" aria-label="Вес багажа, кг (вес одной штуки × количество)">` : '')
       + (moved>0 ? ` <span class="of">из ${r.qty+moved}</span>` : '')
-      + `</span>${poolCtl(r)}</div>`;
+      + `</span>${poolCtl(k,r)}</div>`;
   });
   if(!P[k].length) h = `<div class="hint">${POOL_HINT[k]}</div>`;
   $(k+'Box').innerHTML = h;
@@ -408,15 +455,22 @@ function renderPool(k){
     const bt = bag.Y + bag.J;
     $('sbyCnt').textContent = left.Y + left.J;
     $('sbyBrk').textContent = P.sby.length ? `Y ${left.Y} · J ${left.J}` + (bt>0 ? ` · багаж ${bt}` : '') : '';
+  } else {
+    const left = {Y:0, J:0}, bag = {Y:0, J:0}; let all = 0;
+    P.oth.forEach(r=>{ left[r.cls] += r.qty; all += r.qty + (r.moved||0); if(r.type==='B') bag[r.cls] += r.qty; });
+    const bt = bag.Y + bag.J, got = all - left.Y - left.J;
+    $('othCnt').textContent = left.Y + left.J;
+    $('othBrk').textContent = P.oth.length ? `Y ${left.Y} · J ${left.J}` + (bt>0 ? ` · багаж ${bt}` : '') + (got>0 ? ` · всего ${all}` : '') : '';
   }
 }
 function renderLog(){
   const groups = [];
   entries.forEach(e=>{
-    const sb = Math.min(e.sby||0, e.qty);
-    const ot = Math.min(e.oth||0, e.qty-sb);
-    const up = Math.min(e.upg||0, e.qty-sb-ot);
-    const dn = Math.min(e.dng||0, e.qty-sb-ot-up);
+    const Q = e.qty + (e.gone||0);                       // люди в строке + ушедшие через u / d (они всё равно «из SBY / с рейса»)
+    const sb = Math.min(e.sby||0, Q);
+    const ot = Math.min(e.oth||0, Q-sb);
+    const up = Math.min(e.upg||0, Math.max(e.qty-sb-ot,0));
+    const dn = Math.min(e.dng||0, Math.max(e.qty-sb-ot-up,0));
     let g = groups.find(x=>x.act===e.act && x.type===e.type && x.cls===e.cls);
     if(!g){ g = {act:e.act, type:e.type, cls:e.cls, qty:0, sby:0, oth:0, upg:0, dng:0, fl:{}}; groups.push(g); }
     g.qty += e.qty; g.sby += sb; g.oth += ot; g.upg += up; g.dng += dn;
@@ -455,10 +509,12 @@ function renderLog(){
   $('log').innerHTML = lines.length ? lines.join('') : '<div class="empty">Пока пусто</div>';
 }
 function render(){
+  entries = entries.filter(e=>e.qty>0 || (e.gone||0)>0);          // пустые строки убираем, кроме тех, что хранят метки SBY / другого рейса
   const {total, pax, net} = calc();
   let h = `<div class="ln"><span class="pre">DESTINATION: <span class="t" data-k="dest">${esc(D())}</span>. Flight ${esc(fltText())}</span></div>`;
   h += `<div class="ln"><span class="pre">Total ${total} pax</span></div>`;
   entries.forEach((e,i)=>{
+    if(e.qty<=0) return;
     const neg = e.act==='-';
     const sp = e.type==='B' ? '' : ' ';
     h += `<div class="ln e" data-i="${i}"><span class="pre">`
@@ -467,12 +523,13 @@ function render(){
       + `<span class="q">${e.qty}</span>${sp}`
       + `<span class="t" data-k="type">${e.type}</span> `
       + `<span class="t cls ${e.cls}" data-k="cls">${e.cls}</span> `
-      + `<span class="t wt ${neg?'neg':'pos'}" data-k="wt">${e.act}${unitE(e)*e.qty}kg</span>`
+      + `<span class="t wt ${neg?'neg':'pos'}" data-k="wt">${e.act}${entW(e)}kg</span>`
       + `</span>${mainCtl(e)}</div>`;
   });
-  if(!entries.length) h += `<div class="hint">Нажмите «+ Строка», затем правьте строку касаниями: знак −/+, вес, Y/J, удержание на типе (M, F…), квадратики − и + для количества, u / d — перевод одного пассажира в бизнес / эконом.</div>`;
-  if(entries.length && net!==0) h += `<div class="ln"><span class="pre">${net<0?'–':'+'} ${Math.abs(net)} kg</span></div>`;
-  h += `<div class="ln tot"><span class="pre">Total pax ${pax}</span></div>`;
+  if(!entries.some(e=>e.qty>0)) h += `<div class="hint">Нажмите «+ Строка», затем правьте строку касаниями: знак −/+, вес, Y/J, удержание на типе (M, F…), квадратики − и + для количества, u / d — перевод одного пассажира в бизнес / эконом.</div>`;
+  h += `<div class="foot">`;                                      // итог закреплён внизу окна: не прячется под ползунок
+  if(entries.some(e=>e.qty>0) && net!==0) h += `<div class="ln"><span class="pre">${net<0?'–':'+'} ${Math.abs(net)} kg</span></div>`;
+  h += `<div class="ln tot"><span class="pre">Total pax ${pax}</span></div></div>`;
   $('out').innerHTML = h;
   POOLS.forEach(renderPool);
   renderLog();
@@ -525,15 +582,20 @@ function changeClass(i){
   if(!e) return;
   const to = e.cls==='J' ? 'Y' : 'J', type = e.type;
   snap();
+  let w = null;
   if(e.act==='+'){
-    e.qty--;
-    trimTags(e, true);
-    if(e.qty<=0) entries.splice(i,1);
+    w = popUnit(e);
+    if(e.cls==='J' && (e.upg||0)>0) e.upg--;                       // это отмена апгрейда
+    else if(e.cls==='Y' && (e.dng||0)>0) e.dng--;                  // это отмена даунгрейда
+    else if((e.sby||0)+(e.oth||0)>0) e.gone = (e.gone||0)+1;       // метки SBY / другого рейса остаются за рейсом
+    trimTags(e, true, [w]);
+    if(e.qty<=0 && !(e.gone>0)) entries.splice(i,1);
   } else {
-    e.qty++;
+    addUnit(e, null);
   }
-  const t = bump('+', type, to, 1, e);
-  if(to==='J') t.upg = (t.upg||0)+1; else t.dng = (t.dng||0)+1;
+  const t = bump('+', type, to, 1, e.act==='+' ? w : null);
+  if((t.gone||0)>0) t.gone--;                                      // человек вернулся в строку, откуда ушёл
+  else if(to==='J') t.upg = (t.upg||0)+1; else t.dng = (t.dng||0)+1;
   render();
 }
 function onTap(p){
@@ -543,18 +605,18 @@ function onTap(p){
   if(!e) return;
   if(p.k==='act'){ snap(); dropPools(e,'return'); e.act = e.act==='-' ? '+' : '-'; clearTags(e); render(); }
   else if(p.k==='cls'){ snap(); dropPools(e,'forget'); e.cls = e.cls==='Y' ? 'J' : 'Y'; clearTags(e); render(); }
-  else if(p.k==='type'){ snap(); dropPools(e,'forget'); e.type = nextType(e.type, TYPES); delete e.kg; clearTags(e); render(); }
+  else if(p.k==='type'){ snap(); dropPools(e,'forget'); e.type = nextType(e.type, TYPES); delete e.kgs; clearTags(e); render(); }
   else if(p.k==='chg') changeClass(p.i);
-  else if(p.k==='wt' || p.k==='inc'){ snap(); e.qty++; render(); }
-  else if(p.k==='dec'){ if(e.qty>1){ snap(); e.qty--; trimTags(e); render(); } }
+  else if(p.k==='wt' || p.k==='inc'){ snap(); addUnit(e, null); render(); }
+  else if(p.k==='dec'){ if(e.qty>1){ snap(); const w = popUnit(e); trimTags(e, false, [w]); render(); } }
 }
 function onHold(p){
   const e = entries[p.i];
   if(!e) return;
   if(p.k==='type'){
-    openTypePicker(p.el, TYPES, t=>{ snap(); dropPools(e,'forget'); e.type = t; delete e.kg; clearTags(e); render(); });
+    openTypePicker(p.el, TYPES, t=>{ snap(); dropPools(e,'forget'); e.type = t; delete e.kgs; clearTags(e); render(); });
   } else if(p.k==='wt'){
-    if(e.qty>1){ snap(); e.qty--; trimTags(e); render(); }
+    if(e.qty>1){ snap(); const w = popUnit(e); trimTags(e, false, [w]); render(); }
   }
   buzz();
 }
@@ -566,9 +628,9 @@ function poolTake(k, i){          // ↓ забрать одного на рей
   snap();
   const fl = rowFl(k, r);
   r.qty--; r.moved = (r.moved||0)+1;
-  let e = entries.find(x=>x.act==='+' && sameRowEntry(x,r));
-  if(e) e.qty++;
-  else { e = {act:'+', type:r.type, cls:r.cls, qty:1}; if(r.type==='B' && r.kg!=null) e.kg = r.kg; entries.push(e); }
+  let e = entries.find(x=>x.act==='+' && x.type===r.type && x.cls===r.cls);
+  if(!e){ e = {act:'+', type:r.type, cls:r.cls, qty:0}; entries.push(e); }
+  addUnit(e, (r.type==='B' && r.kg!=null) ? r.kg : null);
   if(k==='oth') othAdd(e, fl, 1); else e[k] = (e[k]||0)+1;
   render();
   $('out').scrollTop = $('out').scrollHeight;
@@ -583,12 +645,22 @@ function poolReturn(k, i){        // ↑ вернуть одного обрат�
   let j = entries.findIndex(x=>same(x) && tagged(x));
   if(j<0) j = entries.findIndex(same);
   const e = entries[j];
-  e.qty--;
+  if(e.type==='B'){ const u = unitR(r), l = bagList(e); popUnit(e, l.lastIndexOf(u)); } else popUnit(e);
   if(tagged(e)){ if(k==='oth') othAdd(e, fl, -1); else e[k]--; }
   trimTags(e);
   if(e.qty<=0) entries.splice(j,1);
   r.qty++; r.moved--;
   render();
+}
+/* смена типа строки в окне. SBY: багаж — одна строка = один багаж, вес по умолчанию 20 (текущее «Bag kg»), его можно изменить;
+   если в строке было несколько человек (например 3 M), при переходе на багаж остаётся 1 шт. */
+function setPoolType(k, i, t){
+  const r = P[k][i];
+  r.type = t; r.moved = 0;
+  if(k==='sby' && t==='B'){
+    r.kg = wOf('B');
+    if(r.qty>1) r.qty = 1;
+  } else delete r.kg;
 }
 function poolDec(k, i){
   const r = P[k][i];
@@ -600,16 +672,16 @@ function onPoolTap(k, p){
   if(!r) return;
   if(p.k==='down') poolTake(k, p.i);
   else if(p.k==='up') poolReturn(k, p.i);
-  else if(p.k==='type'){ snap(); r.type = nextType(r.type, TYPES); delete r.kg; r.moved = 0; render(); }
+  else if(p.k==='type'){ snap(); setPoolType(k, p.i, nextType(r.type, TYPES)); render(); }
   else if(p.k==='cls'){ snap(); r.cls = r.cls==='Y' ? 'J' : 'Y'; r.moved = 0; render(); }
-  else if(p.k==='qty' || p.k==='inc'){ snap(); r.qty++; render(); }
-  else if(p.k==='dec') poolDec(k, p.i);
+  else if(p.k==='qty' || p.k==='inc'){ if(k==='sby' && r.type==='B') return; snap(); r.qty++; render(); }
+  else if(p.k==='dec'){ if(k==='sby' && r.type==='B') return; poolDec(k, p.i); }
 }
 function onPoolHold(k, p){
   const r = P[k][p.i];
   if(!r) return;
   if(p.k==='type'){
-    openTypePicker(p.el, TYPES, t=>{ snap(); r.type = t; delete r.kg; r.moved = 0; render(); });
+    openTypePicker(p.el, TYPES, t=>{ snap(); setPoolType(k, p.i, t); render(); });
   } else if(p.k==='qty'){
     poolDec(k, p.i);
   }
@@ -659,6 +731,11 @@ POOLS.forEach(k=>{
     const inp = ev.target; if(!inp.classList) return;
     const row = inp.closest('[data-i]'), r = row && P[k][Number(row.dataset.i)];
     if(!r) return;
+    if(inp.classList.contains('wk') && k==='sby'){      // SBY: вес багажа вписанный; если стёрли и оставили пустым — снова 20 (общий «Bag kg»)
+      const raw = inp.value.trim();
+      r.kg = raw==='' ? wOf('B') : Math.round(Math.max(0, Number(raw)||0) / Math.max(r.qty,1) * 100) / 100;
+      save(); return;
+    }
     if(inp.classList.contains('fl')){
       const nv = inp.value.toUpperCase().replace(/[^\p{L}\p{N}-]/gu,'').slice(0,7), old = r.fl||'';
       if(nv!==old){ renameFlight(r, old, nv); if(nv) r.fl = nv; else delete r.fl; }
