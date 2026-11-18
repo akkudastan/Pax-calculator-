@@ -413,7 +413,7 @@ function bump(act, type, cls, n, w){
   for(let i=0;i<n;i++) addUnit(x, w);
   return x;
 }
-function clearTags(e){ e.sby = 0; e.oth = 0; e.othF = {}; e.upg = 0; e.dng = 0; e.gone = 0; }
+function clearTags(e){ e.sby = 0; e.oth = 0; e.othF = {}; e.upg = 0; e.dng = 0; e.gone = 0; e.mv = 0; }
 /* e.gone — сколько человек ушло из этой строки через u / d: метки «из SBY» и «с другого рейса» принадлежат рейсу, а не строке,
    поэтому апгрейд/даунгрейд их не трогает (в итоге «из SBY» остаётся столько же, сколько забрали) */
 /* метка «с другого рейса» хранится по номерам рейсов: e.othF = {'KC123': 2, '': 1}, e.oth — сумма */
@@ -679,7 +679,11 @@ function changeClass(i){
     trimTags(e, true, [w]);
     if(e.qty<=0 && !(e.gone>0)) entries.splice(i,1);
   } else {
-    addUnit(e, null);
+    /* строка «снято»: u/d переводит человека, который в ней уже стоит (mv — сколько уже переведено);
+       когда все переведены, снимаем ещё одного */
+    e.mv = Math.min(e.mv||0, e.qty);
+    if(e.mv >= e.qty) addUnit(e, null);
+    e.mv++;
   }
   const t = bump('+', type, to, 1, e.act==='+' ? w : null);
   if((t.gone||0)>0) t.gone--;                                      // человек вернулся в строку, откуда ушёл
